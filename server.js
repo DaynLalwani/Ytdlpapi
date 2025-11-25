@@ -14,6 +14,7 @@ if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR);
 const deleteTimers = new Map();
 
 app.get("/stream/:id", async (req, res) => {
+  console.log("Serving "+req)
   const videoId = req.params.id;
   const url = `https://www.youtube.com/watch?v=${videoId}`;
   const outputPath = path.join(TEMP_DIR, `${videoId}.mp4`);
