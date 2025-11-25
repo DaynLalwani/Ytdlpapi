@@ -1,79 +1,86 @@
 const express = require("express");
+const { execFile } = require("child_process");
 const fs = require("fs");
 const path = require("path");
-const { execSync } = require("child_process");
 
 const app = express();
-const TMP_DIR = path.join(__dirname, "tmp");
-if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR);
+const PORT = process.env.PORT || 3000;
+const TEMP_DIR = path.join(__dirname, "tmp");
 
-app.get("/video/:id", (req, res) => {
+// Ensure temp folder exists
+if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR);
+
+// Map to track deletion timers
+const deleteTimers = new Map();
+
+app.get("/download/:id", (req, res) => {
   const videoId = req.params.id;
-  const tmpFile = path.join(TMP_DIR, `${videoId}.mp4`);
+  const url = `https://www.youtube.com/watch?v=${videoId}`;
+  const outputPath = path.join(TEMP_DIR, `${videoId}.mp4`);
+  const cookieFilePath = path.join(TEMP_DIR, `cookies_${videoId}.txt`);
 
-  // If file exists, stream it
-  if (fs.existsSync(tmpFile)) {
-    return streamFile(tmpFile, res);
-  }
-
-  try {
-    // Get a direct MP4 URL (480p if possible)
-    const url = `https://www.youtube.com/watch?v=${videoId}`;
-    let directLink = execSync(
-      `yt-dlp -f "best[ext=mp4][height<=480]" -g "${url}"`
-    ).toString().trim();
-
-    if (!directLink) throw new Error("No single mp4 format available");
-
-    // Download & make streamable (-movflags +faststart)
-    execSync(
-      `yt-dlp -f "best[ext=mp4][height<=480]" -o "${tmpFile}" "${url}"`
+  // Write cookies from ENV variable
+  if (process.env.YOUTUBE_COOKIES) {
+    fs.writeFileSync(
+      cookieFilePath,
+      process.env.YOUTUBE_COOKIES.replace(/\\n/g, "\n")
     );
-    execSync(`ffmpeg -i "${tmpFile}" -c copy -movflags +faststart "${tmpFile}.tmp"`);
-    fs.renameSync(`${tmpFile}.tmp`, tmpFile);
-
-    streamFile(tmpFile, res);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to fetch video", details: err.message });
   }
+
+  // If file already exists, reset deletion timer and send it
+  if (fs.existsSync(outputPath)) {
+    if (deleteTimers.has(videoId)) clearTimeout(deleteTimers.get(videoId));
+    deleteTimers.set(
+      videoId,
+      setTimeout(() => {
+        if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+        if (fs.existsSync(cookieFilePath)) fs.unlinkSync(cookieFilePath);
+        deleteTimers.delete(videoId);
+      }, 60 * 1000) // 1 minute
+    );
+
+    return res.download(outputPath, `${videoId}.mp4`);
+  }
+
+  // Download video at 480p (fallback if not available)
+  const args = [
+    "-f",
+    "bestvideo[height<=480]+bestaudio/best",
+    "--merge-output-format",
+    "mp4",
+    "-o",
+    outputPath,
+    url,
+  ];
+
+  // Add cookies if available
+  if (process.env.YOUTUBE_COOKIES) args.unshift("--cookies", cookieFilePath);
+
+  execFile("yt-dlp", args, (err, stdout, stderr) => {
+    if (err) {
+      console.error("yt-dlp error:", stderr.toString());
+      if (fs.existsSync(cookieFilePath)) fs.unlinkSync(cookieFilePath);
+      return res.status(500).json({
+        error: "Failed to download video",
+        details: stderr.toString(),
+      });
+    }
+
+    // Schedule deletion of file and cookie after 1 minute
+    deleteTimers.set(
+      videoId,
+      setTimeout(() => {
+        if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+        if (fs.existsSync(cookieFilePath)) fs.unlinkSync(cookieFilePath);
+        deleteTimers.delete(videoId);
+      }, 60 * 1000)
+    );
+
+    // Send file to client (IE11 compatible)
+    res.download(outputPath, `${videoId}.mp4`);
+  });
 });
 
-function streamFile(filePath, res) {
-  const stat = fs.statSync(filePath);
-  const fileSize = stat.size;
-  const range = res.req.headers.range;
-
-  if (range) {
-    const parts = range.replace(/bytes=/, "").split("-");
-    const start = parseInt(parts[0], 10);
-    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-    const chunksize = end - start + 1;
-    const stream = fs.createReadStream(filePath, { start, end });
-    res.writeHead(206, {
-      "Content-Range": `bytes ${start}-${end}/${fileSize}`,
-      "Accept-Ranges": "bytes",
-      "Content-Length": chunksize,
-      "Content-Type": "video/mp4",
-    });
-    stream.pipe(res);
-  } else {
-    res.writeHead(200, {
-      "Content-Length": fileSize,
-      "Content-Type": "video/mp4",
-    });
-    fs.createReadStream(filePath).pipe(res);
-  }
-}
-
-// Optional: auto-delete after 1 min
-setInterval(() => {
-  const files = fs.readdirSync(TMP_DIR);
-  const now = Date.now();
-  files.forEach(f => {
-    const fp = path.join(TMP_DIR, f);
-    if (now - fs.statSync(fp).mtimeMs > 60_000) fs.unlinkSync(fp);
-  });
-}, 30_000);
-
-app.listen(8080, () => console.log("Server running on port 8080"));
+app.listen(PORT, () => {
+  console.log(`YouTube MP4 API running on port ${PORT}`);
+});
