@@ -1,13 +1,12 @@
 {
   "name": "youtube-mp4-api",
   "version": "1.0.0",
-  "description": "Simple API to download YouTube videos as MP4",
+  "description": "API to download YouTube videos as MP4",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "yt-dlp-exec": "^1.0.7"
+    "express": "^4.18.2"
   }
 }
