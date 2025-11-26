@@ -1,26 +1,14 @@
-const express = require("express");
-const { spawn } = require("child_process");
-const cors = require("cors");
+app.get("/stream/:id", async (req, res) => {
+  const { id } = req.params;
+  const url = `https://www.youtube.com/watch?v=${id}`;
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+  const args = [
+    "-f", "best[ext=mp4][height<=480]", // only progressive MP4
+    "-g", // get direct URL
+    url
+  ];
 
-app.use(cors());
-
-const YOUTUBE_COOKIES = process.env.YOUTUBE_COOKIES || null;
-
-app.get("/stream/:id", (req, res) => {
-  const videoId = req.params.id;
-  const url = `https://www.youtube.com/watch?v=${videoId}`;
-
-  // Only progressive MP4 up to 480p
-  const args = ["-g", "-f", "best[ext=mp4][height<=480]"];
-
-  if (YOUTUBE_COOKIES) {
-    args.unshift("--cookies", "-");
-  }
-
-  args.push(url);
+  if (YOUTUBE_COOKIES) args.unshift("--cookies", "-");
 
   const yt = spawn("yt-dlp", args, YOUTUBE_COOKIES ? { stdio: ["pipe", "pipe", "pipe"] } : undefined);
 
@@ -36,10 +24,10 @@ app.get("/stream/:id", (req, res) => {
 
   yt.on("close", code => {
     if (code !== 0 || !link.trim()) {
-      return res.status(500).json({ error: "Failed to get MP4 link" });
+      return res.status(500).json({ 
+        error: "No progressive MP4 available. Cannot provide a direct MP4 link without downloading." 
+      });
     }
-    res.json({ videoId, stream: link.trim() });
+    res.json({ videoId: id, stream: link.trim() });
   });
 });
-
-app.listen(PORT, () => console.log(`✅ API running on http://localhost:${PORT}`));
