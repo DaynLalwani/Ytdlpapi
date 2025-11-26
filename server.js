@@ -14,7 +14,7 @@ app.get("/stream/:id", (req, res) => {
   const url = `https://www.youtube.com/watch?v=${videoId}`;
 
   // Force only progressive MP4, max 720p
-  const args = ["-g", "-f", "best[ext=mp4][height<=720][acodec!=none][vcodec!=none]", url];
+  const args = ["-g", "-f", "best[ext=mp4][height<=480][acodec!=none][vcodec!=none]", url];
 
   if (YOUTUBE_COOKIES) args.unshift("--cookies", "-");
 
