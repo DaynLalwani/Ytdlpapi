@@ -5,15 +5,15 @@ const cors = require("cors");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Enable CORS for frontend requests
+// Enable CORS for all origins
 app.use(cors());
 
-// Optional: YouTube cookies for private/age-restricted videos
+// Optional YouTube cookies (for private/age-restricted videos)
 const YOUTUBE_COOKIES = process.env.YOUTUBE_COOKIES || null;
 
 /**
  * Usage:
- * /stream/:id -> best MP4 available
+ * /stream/:id -> best progressive MP4
  * /stream/:id?quality=720 -> 720p MP4
  */
 app.get("/stream/:id", (req, res) => {
@@ -21,20 +21,18 @@ app.get("/stream/:id", (req, res) => {
   const quality = req.query.quality || "best";
   const url = `https://www.youtube.com/watch?v=${videoId}`;
 
-  // Quality -> yt-dlp format selector (progressive MP4 only)
+  // Progressive MP4 formats only
   const qualityFormats = {
-    "1080": "best[ext=mp4][height<=1080][acodec!=none][vcodec!=none]",
-    "720":  "best[ext=mp4][height<=720][acodec!=none][vcodec!=none]",
-    "480":  "best[ext=mp4][height<=480][acodec!=none][vcodec!=none]",
-    "360":  "best[ext=mp4][height<=360][acodec!=none][vcodec!=none]",
-    "best": "best[ext=mp4][acodec!=none][vcodec!=none]/best"
+    "720": "best[ext=mp4][height<=720][acodec!=none][vcodec!=none]",
+    "480": "best[ext=mp4][height<=480][acodec!=none][vcodec!=none]",
+    "360": "best[ext=mp4][height<=360][acodec!=none][vcodec!=none]",
+    "best": "best[ext=mp4][acodec!=none][vcodec!=none]/best[ext=mp4]"
   };
 
   const format = qualityFormats[quality] || qualityFormats.best;
 
   const args = ["-g", "-f", format, url];
 
-  // If cookies are provided, use them
   if (YOUTUBE_COOKIES) {
     args.unshift("--cookies", "-");
   }
