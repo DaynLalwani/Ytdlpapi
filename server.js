@@ -13,10 +13,14 @@ app.get("/stream/:id", (req, res) => {
   const videoId = req.params.id;
   const url = `https://www.youtube.com/watch?v=${videoId}`;
 
-  // Force only progressive MP4, max 720p
-  const args = ["-g", "-f", "best[ext=mp4][height<=480][acodec!=none][vcodec!=none]", url];
+  // Only progressive MP4 up to 480p
+  const args = ["-g", "-f", "best[ext=mp4][height<=480]"];
 
-  if (YOUTUBE_COOKIES) args.unshift("--cookies", "-");
+  if (YOUTUBE_COOKIES) {
+    args.unshift("--cookies", "-");
+  }
+
+  args.push(url);
 
   const yt = spawn("yt-dlp", args, YOUTUBE_COOKIES ? { stdio: ["pipe", "pipe", "pipe"] } : undefined);
 
