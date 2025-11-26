@@ -15,6 +15,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Copy package.json and install Express
 COPY package*.json ./
 RUN npm install
+RUN npx playwright install chromium
 
 # Copy application files
 COPY . .
